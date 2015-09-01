@@ -23,7 +23,7 @@
 
 #include <folly/Portability.h>
 
-#if FOLLY_X64 || defined(__i386__)
+#if FOLLY_X64 || FOLLY_PPC64 || defined(__i386__)
 #define HAVE_GROUP_VARINT 1
 
 #include <cstdint>
