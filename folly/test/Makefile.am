@@ -53,10 +53,6 @@ cpuid_test_SOURCES = CpuIdTest.cpp
 cpuid_test_LDADD = libgtestmain.la $(top_builddir)/libfolly.la
 TESTS += cpuid_test
 
-group_varint_test_SOURCES = GroupVarintTest.cpp
-group_varint_test_LDADD = libgtestmain.la $(top_builddir)/libfolly.la
-TESTS += group_varint_test
-
 endif
 endif
 
@@ -144,6 +140,10 @@ check_PROGRAMS += concurrent_skiplist_benchmark
 histogram_test_SOURCES = HistogramTest.cpp
 histogram_test_LDADD = libgtestmain.la $(top_builddir)/libfolly.la
 TESTS += histogram_test
+
+group_varint_test_SOURCES = GroupVarintTest.cpp
+group_varint_test_LDADD = libgtestmain.la $(top_builddir)/libfolly.la
+TESTS += group_varint_test
 
 map_util_test_SOURCES = MapUtilTest.cpp
 map_util_test_LDADD = libgtestmain.la $(top_builddir)/libfolly.la
