@@ -273,6 +273,7 @@ class AsyncSSLSocket : public virtual AsyncSocket {
   virtual void shutdownWriteNow() override;
   virtual bool good() const override;
   virtual bool connecting() const override;
+  virtual std::string getApplicationProtocol() noexcept override;
 
   bool isEorTrackingEnabled() const override;
   virtual void setEorTracking(bool track) override;
@@ -831,8 +832,6 @@ class AsyncSSLSocket : public virtual AsyncSocket {
 
   static void sslInfoCallback(const SSL *ssl, int type, int val);
 
-  // Whether we've applied the TCP_CORK option to the socket
-  bool corked_{false};
   // SSL related members.
   bool server_{false};
   // Used to prevent client-initiated renegotiation.  Note that AsyncSSLSocket

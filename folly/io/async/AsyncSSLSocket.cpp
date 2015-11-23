@@ -402,6 +402,15 @@ bool AsyncSSLSocket::connecting() const {
                                      sslState_ == STATE_CONNECTING))));
 }
 
+std::string AsyncSSLSocket::getApplicationProtocol() noexcept {
+  const unsigned char* protoName = nullptr;
+  unsigned protoLength;
+  if (getSelectedNextProtocolNoThrow(&protoName, &protoLength)) {
+    return std::string(reinterpret_cast<const char*>(protoName), protoLength);
+  }
+  return "";
+}
+
 bool AsyncSSLSocket::isEorTrackingEnabled() const {
   const BIO *wb = SSL_get_wbio(ssl_);
   return wb && wb->method == &eorAwareBioMethod;
@@ -968,8 +977,8 @@ AsyncSSLSocket::handleAccept() noexcept {
   }
 
   if (server_ && parseClientHello_) {
-    SSL_set_msg_callback_arg(ssl_, this);
     SSL_set_msg_callback(ssl_, &AsyncSSLSocket::clientHelloParsingCallback);
+    SSL_set_msg_callback_arg(ssl_, this);
   }
 
   errno = 0;
@@ -1296,7 +1305,7 @@ ssize_t AsyncSSLSocket::performWrite(const iovec* vec,
       return -1;
   }
 
-  bool cork = isSet(flags, WriteFlags::CORK);
+  bool cork = isSet(flags, WriteFlags::CORK) || persistentCork_;
   CorkGuard guard(fd_, count > 1, cork, &corked_);
 
 #if 0
@@ -1566,7 +1575,6 @@ AsyncSSLSocket::clientHelloParsingCallback(int written, int version,
     return;
   }
   if (contentType != SSL3_RT_HANDSHAKE) {
-    sock->resetClientHelloParsing(ssl);
     return;
   }
   if (len == 0) {

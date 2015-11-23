@@ -15,12 +15,28 @@
  */
 #include "Baton.h"
 
+#include <chrono>
+
 #include <folly/detail/MemoryIdler.h>
+#include <folly/experimental/fibers/FiberManager.h>
 
 namespace folly { namespace fibers {
 
 void Baton::wait() {
   wait([](){});
+}
+
+void Baton::wait(TimeoutHandler& timeoutHandler) {
+  auto timeoutFunc = [this, &timeoutHandler] {
+    if (!try_wait()) {
+      postHelper(TIMEOUT);
+    }
+    timeoutHandler.timeoutPtr_ = 0;
+  };
+  timeoutHandler.timeoutFunc_ = std::ref(timeoutFunc);
+  timeoutHandler.fiberManager_ = FiberManager::getFiberManagerUnsafe();
+  wait();
+  timeoutHandler.cancelTimeout();
 }
 
 bool Baton::timed_wait(TimeoutController::Duration timeout) {
@@ -151,6 +167,24 @@ void Baton::postThread() {
 
 void Baton::reset() {
   waitingFiber_.store(NO_WAITER, std::memory_order_relaxed);;
+}
+
+void Baton::TimeoutHandler::scheduleTimeout(
+    TimeoutController::Duration timeout) {
+  assert(fiberManager_ != nullptr);
+  assert(timeoutFunc_ != nullptr);
+  assert(timeoutPtr_ == 0);
+
+  if (timeout.count() > 0) {
+    timeoutPtr_ = fiberManager_->timeoutManager_->registerTimeout(
+        timeoutFunc_, timeout);
+  }
+}
+
+void Baton::TimeoutHandler::cancelTimeout() {
+  if (timeoutPtr_) {
+    fiberManager_->timeoutManager_->cancel(timeoutPtr_);
+  }
 }
 
 }}

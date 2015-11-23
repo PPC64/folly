@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <folly/Optional.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <folly/io/async/DelayedDestruction.h>
 
@@ -58,7 +59,9 @@ namespace folly {
 class HHWheelTimer : private folly::AsyncTimeout,
                      public folly::DelayedDestruction {
  public:
-  typedef std::unique_ptr<HHWheelTimer, Destructor> UniquePtr;
+  // This type has always been a misnomer, because it is not a unique pointer.
+  using UniquePtr = std::unique_ptr<HHWheelTimer, Destructor>;
+  using SharedPtr = IntrusivePtr<HHWheelTimer>;
 
   template <typename... Args>
   static UniquePtr newTimer(Args&&... args) {
@@ -133,6 +136,7 @@ class HHWheelTimer : private folly::AsyncTimeout,
     void cancelTimeoutImpl();
 
     HHWheelTimer* wheel_;
+    folly::Optional<DestructorGuard> wheelGuard_;
     std::chrono::milliseconds expiration_;
 
     typedef boost::intrusive::list_member_hook<

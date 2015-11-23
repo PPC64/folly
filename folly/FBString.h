@@ -32,6 +32,12 @@
 
 #pragma GCC system_header
 
+// When used as std::string replacement always disable assertions.
+#ifndef NDEBUG
+#define NDEBUG
+#define FOLLY_DEFINED_NDEBUG_FOR_FBSTRING
+#endif // NDEBUG
+
 // Handle the cases where the fbcode version (folly/Malloc.h) is included
 // either before or after this inclusion.
 #ifdef FOLLY_MALLOC_H_
@@ -1006,7 +1012,23 @@ private:
 
 public:
   // C++11 21.4.2 construct/copy/destroy
-  explicit basic_fbstring(const A& /*a*/ = A()) noexcept {
+
+  // Note: while the following two constructors can be (and previously were)
+  // collapsed into one constructor written this way:
+  //
+  //   explicit basic_fbstring(const A& a = A()) noexcept { }
+  //
+  // This can cause Clang (at least version 3.7) to fail with the error:
+  //   "chosen constructor is explicit in copy-initialization ...
+  //   in implicit initialization of field '(x)' with omitted initializer"
+  //
+  // if used in a struct which is default-initialized.  Hence the split into
+  // these two separate constructors.
+
+  basic_fbstring() noexcept : basic_fbstring(A()) {
+  }
+
+  explicit basic_fbstring(const A&) noexcept {
   }
 
   basic_fbstring(const basic_fbstring& str)
@@ -2536,5 +2558,10 @@ FOLLY_FBSTRING_HASH
 #undef throw
 #undef FBSTRING_LIKELY
 #undef FBSTRING_UNLIKELY
+
+#ifdef FOLLY_DEFINED_NDEBUG_FOR_FBSTRING
+#undef NDEBUG
+#undef FOLLY_DEFINED_NDEBUG_FOR_FBSTRING
+#endif // FOLLY_DEFINED_NDEBUG_FOR_FBSTRING
 
 #endif // FOLLY_BASE_FBSTRING_H_

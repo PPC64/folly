@@ -27,6 +27,7 @@
 #include <algorithm>
 #include <boost/operators.hpp>
 #include <climits>
+#include <cstddef>
 #include <cstring>
 #include <glog/logging.h>
 #include <iosfwd>
@@ -200,6 +201,10 @@ public:
   constexpr Range(Iter start, size_t size)
       : b_(start), e_(start + size) { }
 
+# if !__clang__ || __CLANG_PREREQ(3, 7) // Clang 3.6 crashes on this line
+  /* implicit */ Range(std::nullptr_t) = delete;
+# endif
+
   template <class T = Iter, typename detail::IsCharPointer<T>::type = 0>
   constexpr /* implicit */ Range(Iter str)
       : b_(str), e_(str + constexpr_strlen(str)) {}
@@ -352,7 +357,6 @@ public:
     return e_ - b_;
   }
   size_type walk_size() const {
-    assert(b_ <= e_);
     return std::distance(b_, e_);
   }
   bool empty() const { return b_ == e_; }

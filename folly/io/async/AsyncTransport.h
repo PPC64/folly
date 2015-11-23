@@ -464,6 +464,12 @@ class AsyncReader {
 
 class AsyncWriter {
  public:
+  class BufferCallback {
+   public:
+    virtual ~BufferCallback() {}
+    virtual void onEgressBuffered() = 0;
+  };
+
   class WriteCallback {
    public:
     virtual ~WriteCallback() = default;
@@ -493,12 +499,15 @@ class AsyncWriter {
 
   // Write methods that aren't part of AsyncTransport
   virtual void write(WriteCallback* callback, const void* buf, size_t bytes,
-                     WriteFlags flags = WriteFlags::NONE) = 0;
+                     WriteFlags flags = WriteFlags::NONE,
+                     BufferCallback* bufCallback = nullptr) = 0;
   virtual void writev(WriteCallback* callback, const iovec* vec, size_t count,
-                      WriteFlags flags = WriteFlags::NONE) = 0;
+                      WriteFlags flags = WriteFlags::NONE,
+                      BufferCallback* bufCallback = nullptr) = 0;
   virtual void writeChain(WriteCallback* callback,
                           std::unique_ptr<IOBuf>&& buf,
-                          WriteFlags flags = WriteFlags::NONE) = 0;
+                          WriteFlags flags = WriteFlags::NONE,
+                          BufferCallback* bufCallback = nullptr) = 0;
 
  protected:
   virtual ~AsyncWriter() = default;
@@ -516,15 +525,54 @@ class AsyncTransportWrapper : virtual public AsyncTransport,
   // to keep compatibility.
   using ReadCallback    = AsyncReader::ReadCallback;
   using WriteCallback   = AsyncWriter::WriteCallback;
+  using BufferCallback  = AsyncWriter::BufferCallback;
   virtual void setReadCB(ReadCallback* callback) override = 0;
   virtual ReadCallback* getReadCallback() const override = 0;
   virtual void write(WriteCallback* callback, const void* buf, size_t bytes,
-                     WriteFlags flags = WriteFlags::NONE) override = 0;
+                     WriteFlags flags = WriteFlags::NONE,
+                     BufferCallback* bufCallback = nullptr) override = 0;
   virtual void writev(WriteCallback* callback, const iovec* vec, size_t count,
-                      WriteFlags flags = WriteFlags::NONE) override = 0;
+                      WriteFlags flags = WriteFlags::NONE,
+                      BufferCallback* bufCallback = nullptr) override = 0;
   virtual void writeChain(WriteCallback* callback,
                           std::unique_ptr<IOBuf>&& buf,
-                          WriteFlags flags = WriteFlags::NONE) override = 0;
+                          WriteFlags flags = WriteFlags::NONE,
+                          BufferCallback* bufCallback = nullptr) override = 0;
+  /**
+   * The transport wrapper may wrap another transport. This returns the
+   * transport that is wrapped. It returns nullptr if there is no wrapped
+   * transport.
+   */
+  virtual AsyncTransportWrapper* getWrappedTransport() {
+    return nullptr;
+  }
+
+  /**
+   * In many cases when we need to set socket properties or otherwise access the
+   * underlying transport from a wrapped transport. This method allows access to
+   * the derived classes of the underlying transport.
+   */
+  template <class T>
+  T* getUnderlyingTransport() {
+    AsyncTransportWrapper* current = this;
+    while (current) {
+      auto sock = dynamic_cast<T*>(current);
+      if (sock) {
+        return sock;
+      }
+      current = current->getWrappedTransport();
+    }
+    return nullptr;
+  }
+
+  /**
+   * Return the application protocol being used by the underlying transport
+   * protocol. This is useful for transports which are used to tunnel other
+   * protocols.
+   */
+  virtual std::string getApplicationProtocol() noexcept {
+    return "";
+  }
 };
 
 } // folly

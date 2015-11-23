@@ -70,16 +70,24 @@ public:
   struct Cursor {
     explicit Cursor(uint64_t initialTicket) noexcept : ticket(initialTicket) {}
 
-    void moveForward(uint64_t steps = 1) noexcept {
+    /// Returns true if this cursor now points to a different
+    /// write, false otherwise.
+    bool moveForward(uint64_t steps = 1) noexcept {
+      uint64_t prevTicket = ticket;
       ticket += steps;
+      return prevTicket != ticket;
     }
 
-    void moveBackward(uint64_t steps = 1) noexcept {
+    /// Returns true if this cursor now points to a previous
+    /// write, false otherwise.
+    bool moveBackward(uint64_t steps = 1) noexcept {
+      uint64_t prevTicket = ticket;
       if (steps > ticket) {
         ticket = 0;
       } else {
         ticket -= steps;
       }
+      return prevTicket != ticket;
     }
 
   protected: // for test visibility reasons
@@ -99,6 +107,16 @@ public:
   void write(T& value) noexcept {
     uint64_t ticket = ticket_.fetch_add(1);
     slots_[idx(ticket)].write(turn(ticket), value);
+  }
+
+  /// Perform a single write of an object of type T.
+  /// Writes can block iff a previous writer has not yet completed a write
+  /// for the same slot (before the most recent wrap-around).
+  /// Returns a Cursor pointing to the just-written T.
+  Cursor writeAndGetCursor(T& value) noexcept {
+    uint64_t ticket = ticket_.fetch_add(1);
+    slots_[idx(ticket)].write(turn(ticket), value);
+    return Cursor(ticket);
   }
 
   /// Read the value at the cursor.
