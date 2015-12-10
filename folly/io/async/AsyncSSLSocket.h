@@ -376,7 +376,8 @@ class AsyncSSLSocket : public virtual AsyncSocket {
 
   /**
    * Get the name of the protocol selected by the client during
-   * Next Protocol Negotiation (NPN)
+   * Next Protocol Negotiation (NPN) or Application Layer Protocol Negotiation
+   * (ALPN)
    *
    * Throw an exception if openssl does not support NPN
    *
@@ -386,13 +387,17 @@ class AsyncSSLSocket : public virtual AsyncSocket {
    *                       Note: the AsyncSSLSocket retains ownership
    *                       of this string.
    * @param protoNameLen   Length of the name.
+   * @param protoType      Whether this was an NPN or ALPN negotiation
    */
-  virtual void getSelectedNextProtocol(const unsigned char** protoName,
-      unsigned* protoLen) const;
+  virtual void getSelectedNextProtocol(
+      const unsigned char** protoName,
+      unsigned* protoLen,
+      SSLContext::NextProtocolType* protoType = nullptr) const;
 
   /**
    * Get the name of the protocol selected by the client during
-   * Next Protocol Negotiation (NPN)
+   * Next Protocol Negotiation (NPN) or Application Layer Protocol Negotiation
+   * (ALPN)
    *
    * @param protoName      Name of the protocol (not guaranteed to be
    *                       null terminated); will be set to nullptr if
@@ -400,16 +405,19 @@ class AsyncSSLSocket : public virtual AsyncSocket {
    *                       Note: the AsyncSSLSocket retains ownership
    *                       of this string.
    * @param protoNameLen   Length of the name.
+   * @param protoType      Whether this was an NPN or ALPN negotiation
    * @return false if openssl does not support NPN
    */
-  virtual bool getSelectedNextProtocolNoThrow(const unsigned char** protoName,
-      unsigned* protoLen) const;
+  virtual bool getSelectedNextProtocolNoThrow(
+      const unsigned char** protoName,
+      unsigned* protoLen,
+      SSLContext::NextProtocolType* protoType = nullptr) const;
 
   /**
    * Determine if the session specified during setSSLSession was reused
    * or if the server rejected it and issued a new session.
    */
-  bool getSSLSessionReused() const;
+  virtual bool getSSLSessionReused() const;
 
   /**
    * true if the session was resumed using session ID
@@ -425,7 +433,7 @@ class AsyncSSLSocket : public virtual AsyncSocket {
    * Returns the cipher used or the constant value "NONE" when no SSL session
    * has been established.
    */
-  const char *getNegotiatedCipherName() const;
+  virtual const char* getNegotiatedCipherName() const;
 
   /**
    * Get the server name for this SSL connection.
@@ -461,26 +469,6 @@ class AsyncSSLSocket : public virtual AsyncSocket {
    * Get the certificate size used for this SSL connection.
    */
   int getSSLCertSize() const;
-
-  /* Get the number of bytes read from the wire (including protocol
-   * overhead). Returns 0 once the connection has been closed.
-   */
-  unsigned long getBytesRead() const {
-    if (ssl_ != nullptr) {
-      return BIO_number_read(SSL_get_rbio(ssl_));
-    }
-    return 0;
-  }
-
-  /* Get the number of bytes written to the wire (including protocol
-   * overhead).  Returns 0 once the connection has been closed.
-   */
-  unsigned long getBytesWritten() const {
-    if (ssl_ != nullptr) {
-      return BIO_number_written(SSL_get_wbio(ssl_));
-    }
-    return 0;
-  }
 
   virtual void attachEventBase(EventBase* eventBase) override {
     AsyncSocket::attachEventBase(eventBase);
@@ -732,7 +720,7 @@ class AsyncSSLSocket : public virtual AsyncSocket {
   /**
    * Returns the time taken to complete a handshake.
    */
-  std::chrono::nanoseconds getHandshakeTime() const {
+  virtual std::chrono::nanoseconds getHandshakeTime() const {
     return handshakeEndTime_ - handshakeStartTime_;
   }
 
@@ -749,7 +737,7 @@ class AsyncSSLSocket : public virtual AsyncSocket {
   /**
    * Returns the peer certificate, or nullptr if no peer certificate received.
    */
-  std::unique_ptr<X509, X509_deleter> getPeerCert() const {
+  virtual std::unique_ptr<X509, X509_deleter> getPeerCert() const {
     if (!ssl_) {
       return nullptr;
     }

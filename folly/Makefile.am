@@ -116,11 +116,13 @@ nobase_follyinclude_HEADERS = \
 	experimental/LockFreeRingBuffer.h \
 	experimental/NestedCommandLineApp.h \
 	experimental/ProgramOptions.h \
+	experimental/ReadMostlySharedPtr.h \
 	experimental/Select64.h \
 	experimental/StringKeyedCommon.h \
 	experimental/StringKeyedUnorderedMap.h \
 	experimental/StringKeyedUnorderedSet.h \
 	experimental/TestUtil.h \
+	experimental/TLRefCount.h \
 	experimental/TupleOps.h \
 	SparseByteSet.h \
 	FBString.h \
@@ -249,7 +251,6 @@ nobase_follyinclude_HEADERS = \
 	Random.h \
 	Random-inl.h \
 	Range.h \
-	ReadMostlySharedPtr.h \
 	RWSpinLock.h \
 	ScopeGuard.h \
 	SharedMutex.h \
@@ -280,6 +281,7 @@ nobase_follyinclude_HEADERS = \
 	test/function_benchmark/test_functions.h \
 	test/SynchronizedTestLib.h \
 	test/SynchronizedTestLib-inl.h \
+	test/TestUtils.h \
 	ThreadCachedArena.h \
 	ThreadCachedInt.h \
 	ThreadLocal.h \

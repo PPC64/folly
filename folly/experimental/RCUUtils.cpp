@@ -13,10 +13,40 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include <folly/experimental/RCUUtils.h>
+
+#include <folly/Portability.h>
 #include <folly/ThreadLocal.h>
 
-namespace folly { namespace threadlocal_detail {
 
-PthreadKeyUnregister PthreadKeyUnregister::instance_;
+namespace folly {
 
-}}
+namespace {
+
+struct RCURegisterThreadHelper {
+  RCURegisterThreadHelper() {
+    rcu_register_thread();
+  }
+
+  ~RCURegisterThreadHelper() {
+    rcu_unregister_thread();
+  }
+
+  bool alive{false};
+};
+
+}
+
+bool RCURegisterThread() {
+  static folly::ThreadLocal<RCURegisterThreadHelper>* rcuRegisterThreadHelper =
+    new folly::ThreadLocal<RCURegisterThreadHelper>();
+
+  auto& helper = **rcuRegisterThreadHelper;
+
+  auto ret = !helper.alive;
+  helper.alive = true;
+
+  return ret;
+}
+
+}

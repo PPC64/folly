@@ -13,10 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <folly/ThreadLocal.h>
 
-namespace folly { namespace threadlocal_detail {
+#ifndef FOLLY_TESTUTILS_H
+#define FOLLY_TESTUTILS_H
 
-PthreadKeyUnregister PthreadKeyUnregister::instance_;
+#include <gtest/gtest.h>
 
-}}
+// We use this to indicate that tests have failed because of timing
+// or dependencies that may be flakey. Internally this is used by
+// our test runner to retry the test. To gtest this will look like
+// a normal test failure; there is only an effect if the test framework
+// interprets the message.
+#define SKIP() GTEST_FATAL_FAILURE_("Test skipped by client")
+
+#endif // FOLLY_TESTUTILS_H

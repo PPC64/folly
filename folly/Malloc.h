@@ -73,6 +73,8 @@ extern "C" size_t sallocx(const void*, int)
 __attribute__((__weak__));
 extern "C" void dallocx(void*, int)
 __attribute__((__weak__));
+extern "C" void sdallocx(void*, size_t, int)
+__attribute__((__weak__));
 extern "C" size_t nallocx(size_t, int)
 __attribute__((__weak__));
 extern "C" int mallctl(const char*, void*, size_t*, void*, size_t)
@@ -137,9 +139,9 @@ inline bool usingJEMalloc() noexcept {
     // in the form if (mallctl != nullptr). Not if (mallctl) or if (!mallctl)
     // (!!). http://goo.gl/xpmctm
     if (mallocx == nullptr || rallocx == nullptr || xallocx == nullptr
-        || sallocx == nullptr || dallocx == nullptr || nallocx == nullptr
-        || mallctl == nullptr || mallctlnametomib == nullptr
-        || mallctlbymib == nullptr) {
+        || sallocx == nullptr || dallocx == nullptr || sdallocx == nullptr
+        || nallocx == nullptr || mallctl == nullptr
+        || mallctlnametomib == nullptr || mallctlbymib == nullptr) {
       return false;
     }
 
@@ -174,33 +176,17 @@ inline bool usingJEMalloc() noexcept {
   return result;
 }
 
-/**
- * For jemalloc's size classes, see
- * http://www.canonware.com/download/jemalloc/jemalloc-latest/doc/jemalloc.html
- */
 inline size_t goodMallocSize(size_t minSize) noexcept {
+  if (minSize == 0) {
+    return 0;
+  }
+
   if (!usingJEMalloc()) {
     // Not using jemalloc - no smarts
     return minSize;
   }
-  size_t goodSize;
-  if (minSize <= 64) {
-    // Choose smallest allocation to be 64 bytes - no tripping over
-    // cache line boundaries, and small string optimization takes care
-    // of short strings anyway.
-    goodSize = 64;
-  } else if (minSize <= 512) {
-    // Round up to the next multiple of 64; we don't want to trip over
-    // cache line boundaries.
-    goodSize = (minSize + 63) & ~size_t(63);
-  } else {
-    // Boundaries between size classes depend on numerious factors, some of
-    // which can even be modified at run-time. Determine the good allocation
-    // size by calling nallocx() directly.
-    goodSize = nallocx(minSize, 0);
-  }
-  assert(nallocx(goodSize, 0) == goodSize);
-  return goodSize;
+
+  return nallocx(minSize, 0);
 }
 
 // We always request "good" sizes for allocation, so jemalloc can

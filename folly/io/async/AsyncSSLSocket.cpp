@@ -55,6 +55,7 @@ using folly::AsyncSocket;
 using folly::AsyncSocketException;
 using folly::AsyncSSLSocket;
 using folly::Optional;
+using folly::SSLContext;
 
 // We have one single dummy SSL context so that we can implement attach
 // and detach methods in a thread safe fashion without modifying opnessl.
@@ -412,6 +413,9 @@ std::string AsyncSSLSocket::getApplicationProtocol() noexcept {
 }
 
 bool AsyncSSLSocket::isEorTrackingEnabled() const {
+  if (ssl_ == nullptr) {
+    return false;
+  }
   const BIO *wb = SSL_get_wbio(ssl_);
   return wb && wb->method == &eorAwareBioMethod;
 }
@@ -762,21 +766,36 @@ void AsyncSSLSocket::setSSLSession(SSL_SESSION *session, bool takeOwnership) {
   }
 }
 
-void AsyncSSLSocket::getSelectedNextProtocol(const unsigned char** protoName,
-    unsigned* protoLen) const {
-  if (!getSelectedNextProtocolNoThrow(protoName, protoLen)) {
+void AsyncSSLSocket::getSelectedNextProtocol(
+    const unsigned char** protoName,
+    unsigned* protoLen,
+    SSLContext::NextProtocolType* protoType) const {
+  if (!getSelectedNextProtocolNoThrow(protoName, protoLen, protoType)) {
     throw AsyncSocketException(AsyncSocketException::NOT_SUPPORTED,
                               "NPN not supported");
   }
 }
 
 bool AsyncSSLSocket::getSelectedNextProtocolNoThrow(
-  const unsigned char** protoName,
-  unsigned* protoLen) const {
+    const unsigned char** protoName,
+    unsigned* protoLen,
+    SSLContext::NextProtocolType* protoType) const {
   *protoName = nullptr;
   *protoLen = 0;
+#if OPENSSL_VERSION_NUMBER >= 0x1000200fL && !defined(OPENSSL_NO_TLSEXT)
+  SSL_get0_alpn_selected(ssl_, protoName, protoLen);
+  if (*protoLen > 0) {
+    if (protoType) {
+      *protoType = SSLContext::NextProtocolType::ALPN;
+    }
+    return true;
+  }
+#endif
 #ifdef OPENSSL_NPN_NEGOTIATED
   SSL_get0_next_proto_negotiated(ssl_, protoName, protoLen);
+  if (protoType) {
+    *protoType = SSLContext::NextProtocolType::NPN;
+  }
   return true;
 #else
   return false;
@@ -1094,7 +1113,8 @@ AsyncSSLSocket::handleConnect() noexcept {
 void AsyncSSLSocket::setReadCB(ReadCallback *callback) {
 #ifdef SSL_MODE_MOVE_BUFFER_OWNERSHIP
   // turn on the buffer movable in openssl
-  if (!isBufferMovable_ && callback != nullptr && callback->isBufferMovable()) {
+  if (ssl_ != nullptr && !isBufferMovable_ &&
+      callback != nullptr && callback->isBufferMovable()) {
     SSL_set_mode(ssl_, SSL_get_mode(ssl_) | SSL_MODE_MOVE_BUFFER_OWNERSHIP);
     isBufferMovable_ = true;
   }

@@ -29,6 +29,7 @@
 #include <folly/Foreach.h>
 #include <folly/Exception.h>
 #include <folly/Malloc.h>
+#include <folly/MicroSpinLock.h>
 
 // In general, emutls cleanup is not guaranteed to play nice with the way
 // StaticMeta mixes direct pthread calls and the use of __thread. This has
@@ -163,20 +164,29 @@ struct ThreadEntry {
 
 constexpr uint32_t kEntryIDInvalid = std::numeric_limits<uint32_t>::max();
 
+class PthreadKeyUnregisterTester;
+
 /**
  * We want to disable onThreadExit call at the end of shutdown, we don't care
  * about leaking memory at that point.
  *
  * Otherwise if ThreadLocal is used in a shared library, onThreadExit may be
  * called after dlclose().
+ *
+ * This class has one single static instance; however since it's so widely used,
+ * directly or indirectly, by so many classes, we need to take care to avoid
+ * problems stemming from the Static Initialization/Destruction Order Fiascos.
+ * Therefore this class needs to be constexpr-constructible, so as to avoid
+ * the need for this to participate in init/destruction order.
  */
 class PthreadKeyUnregister {
  public:
-  ~PthreadKeyUnregister() {
-    std::lock_guard<std::mutex> lg(mutex_);
+  static constexpr size_t kMaxKeys = 1UL << 16;
 
-    for (const auto& key: keys_) {
-      pthread_key_delete(key);
+  ~PthreadKeyUnregister() {
+    MSLGuard lg(lock_);
+    while (size_) {
+      pthread_key_delete(keys_[--size_]);
     }
   }
 
@@ -185,20 +195,28 @@ class PthreadKeyUnregister {
   }
 
  private:
-  PthreadKeyUnregister() {}
+  /**
+   * Only one global instance should exist, hence this is private.
+   * See also the important note at the top of this class about `constexpr`
+   * usage.
+   */
+  constexpr PthreadKeyUnregister() : lock_(), size_(0), keys_() { }
+  friend class folly::threadlocal_detail::PthreadKeyUnregisterTester;
 
   void registerKeyImpl(pthread_key_t key) {
-    std::lock_guard<std::mutex> lg(mutex_);
-
-    keys_.push_back(key);
+    MSLGuard lg(lock_);
+    if (size_ == kMaxKeys) {
+      throw std::logic_error("pthread_key limit has already been reached");
+    }
+    keys_[size_++] = key;
   }
 
-  std::mutex mutex_;
-  std::vector<pthread_key_t> keys_;
+  MicroSpinLock lock_;
+  size_t size_;
+  pthread_key_t keys_[kMaxKeys];
 
   static PthreadKeyUnregister instance_;
 };
-
 
 // Held in a singleton to track our global instances.
 // We have one of these per "Tag", by default one for the whole system
@@ -530,10 +548,11 @@ struct StaticMeta {
         * destructing a ThreadLocal and writing to the elements vector
         * of this thread.
         */
-        memcpy(reallocated, threadEntry->elements,
-               sizeof(ElementWrapper) * prevCapacity);
-        using std::swap;
-        swap(reallocated, threadEntry->elements);
+        if (prevCapacity != 0) {
+          memcpy(reallocated, threadEntry->elements,
+                 sizeof(*reallocated) * prevCapacity);
+        }
+        std::swap(reallocated, threadEntry->elements);
       }
       threadEntry->elementsCapacity = newCapacity;
     }
